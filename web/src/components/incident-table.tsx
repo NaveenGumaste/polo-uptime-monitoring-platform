@@ -1,0 +1,10 @@
+import { ArrowUpRight, CheckCheck, Clock3, TriangleAlert } from "lucide-react";
+import type { Incident, Monitor } from "@/lib/types";
+import { formatDate } from "./monitor-table";
+
+export function IncidentTable({ incidents, monitors, loading, unavailable }: { incidents: Incident[]; monitors: Monitor[]; loading: boolean; unavailable: boolean }) {
+  return <section id="incidents" className="panel incident-panel">
+    <div className="panel-heading"><div><div className="section-title"><h2>Incident history</h2><span className="count">{incidents.length}</span></div><p>A timeline of your most recent downtime events.</p></div><span className="quiet-label"><Clock3 size={13} />Latest 25 events</span></div>
+    {loading ? <div className="empty-state"><div className="skeleton incident-skeleton" /><p>Loading incident history…</p></div> : unavailable ? <div className="empty-state"><h3>History unavailable</h3><p>Reconnect your database to see recent downtime events.</p></div> : incidents.length === 0 ? <div className="empty-state incident-empty"><span className="empty-check"><CheckCheck size={23} /></span><h3>No incidents recorded</h3><p>Downtime events will appear here when a check reports a failure.</p></div> : <div className="table-scroll"><table className="incident-table"><caption className="sr-only">Latest 25 downtime events</caption><thead><tr><th>Event</th><th>Monitor</th><th>HTTP</th><th>Reason</th><th>Detected at</th></tr></thead><tbody>{incidents.map((incident) => <tr key={incident.id}><td><span className="incident-label"><TriangleAlert size={14} />Downtime</span></td><td><span className="monitor-name">{monitors.find((monitor) => monitor.id === incident.monitor_id)?.name ?? incident.monitor_id}</span><a className="endpoint" href={incident.url} target="_blank" rel="noreferrer">{incident.url.replace(/^https?:\/\//, "")}<ArrowUpRight size={11} /><span className="sr-only"> (opens in new tab)</span></a></td><td><span className="http-code bad-code">{incident.status_code || "—"}</span></td><td className="reason">{incident.reason}</td><td className="checked-time">{formatDate(incident.created_at)}</td></tr>)}</tbody></table></div>}
+  </section>;
+}

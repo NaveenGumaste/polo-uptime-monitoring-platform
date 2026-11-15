@@ -1,0 +1,17 @@
+{
+  "version": 2,
+  "skills": {
+    "design-skill": {
+      "source": "NaveenGumaste/keyskills",
+      "sourceType": "github",
+      "skillPath": "skills/design-skill/SKILL.md",
+      "computedHash": "1f6270a7949a33f91d0aa292f4840095352a1fa9deed6f47088bd2bc2cb1a069"
+    },
+    "git-skill": {
+      "source": "NaveenGumaste/keyskills",
+      "sourceType": "github",
+      "skillPath": "skills/git-skill/SKILL.md",
+      "computedHash": "29ab514c18184d26b2b0f1a05b4fafaff066f14f0f32f8176d1d60575588cab1"
+    }
+  }
+}
