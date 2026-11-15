@@ -6,11 +6,11 @@ import { StatusBadge } from "./status-badge";
 import { api } from "@/lib/api";
 import type { Monitor, MonitorStatus } from "@/lib/types";
 
-const dateFormatter = new Intl.DateTimeFormat("en-GB", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit", timeZone: "UTC" });
+const dateFormatter = new Intl.DateTimeFormat("en-IN", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false, timeZone: "Asia/Kolkata" });
 
 export function formatDate(value: string | null) {
   if (!value) return "Awaiting first check";
-  return `${dateFormatter.format(new Date(value))} UTC`;
+  return `${dateFormatter.format(new Date(value))} IST`;
 }
 
 export function MonitorTable({ monitors, loading, onDeleted }: { monitors: Monitor[]; loading: boolean; onDeleted: () => Promise<unknown> }) {
