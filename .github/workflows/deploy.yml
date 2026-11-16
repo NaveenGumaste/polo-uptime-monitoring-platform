@@ -10,6 +10,10 @@ permissions:
   contents: read
   packages: write
 
+concurrency:
+  group: polo-production
+  cancel-in-progress: false
+
 jobs:
   build-scan-push:
     name: Check, build, scan, and publish
@@ -97,3 +101,83 @@ jobs:
             docker push "${image}:${GITHUB_SHA}"
             docker push "${image}:latest"
           done
+
+  deploy:
+    name: Deploy and verify on EC2
+    needs: build-scan-push
+    runs-on: ubuntu-24.04
+    if: github.ref == 'refs/heads/main'
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      packages: read
+      id-token: write
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      EC2_INSTANCE_ID: ${{ vars.EC2_INSTANCE_ID }}
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7.0.1
+
+      - name: Authenticate to AWS
+        uses: aws-actions/configure-aws-credentials@v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: polo-deploy-${{ github.run_id }}
+          role-duration-seconds: 3600
+
+      - name: Install Session Manager plugin
+        run: |
+          curl --fail --silent --show-error --retry 3 \
+            https://s3.amazonaws.com/session-manager-downloads/plugin/latest/ubuntu_64bit/session-manager-plugin.deb \
+            -o "$RUNNER_TEMP/session-manager-plugin.deb"
+          sudo dpkg -i "$RUNNER_TEMP/session-manager-plugin.deb"
+
+      - name: Prepare verified SSH connection
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_KEY }}
+        run: bash scripts/deploy/prepare-ssh.sh
+
+      - name: Prepare private release bundle
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
+          REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REGISTRY_USER: ${{ github.actor }}
+        run: python3 scripts/deploy/package-release.py
+
+      - name: Upload release over SSM
+        run: |
+          release="/opt/polo/releases/${GITHUB_SHA}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          tar -C "$RUNNER_TEMP/polo-release" -czf - . |
+            timeout 180s ssh -F "$RUNNER_TEMP/polo-ssh-config" polo-server \
+              "umask 077; mkdir -p '$release' && tar -xzf - -C '$release'"
+
+      - name: Deploy and verify all services
+        run: |
+          release="/opt/polo/releases/${GITHUB_SHA}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          timeout 1200s ssh -F "$RUNNER_TEMP/polo-ssh-config" polo-server \
+            "cd '$release' && bash scripts/remote-deploy.sh"
+          {
+            echo '### EC2 deployment verified'
+            echo "Commit: $GITHUB_SHA"
+            echo '- Five containers passed their health checks.'
+            echo '- Probe results were posted and scraped by Prometheus.'
+            echo '- Service ports remain bound to localhost pending Nginx and HTTPS.'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove temporary credentials and connection files
+        if: always()
+        run: |
+          # Also remove a registry token if upload succeeded but deployment never started.
+          release="/opt/polo/releases/${GITHUB_SHA}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          if test -f "$RUNNER_TEMP/polo-ssh-config"; then
+            timeout 45s ssh -F "$RUNNER_TEMP/polo-ssh-config" polo-server \
+              "rm -f '$release/secrets/registry-token'" || true
+          fi
+          rm -rf "$RUNNER_TEMP/polo-release"
+          rm -f "$RUNNER_TEMP/polo-key" "$RUNNER_TEMP/polo-known-hosts" \
+            "$RUNNER_TEMP/polo-ssh-config" "$RUNNER_TEMP/ec2-console.json"
