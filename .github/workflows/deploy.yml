@@ -1,0 +1,99 @@
+name: Polo CI/CD
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-scan-push:
+    name: Check, build, scan, and publish
+    runs-on: ubuntu-24.04
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7.0.1
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2.2.0
+        with:
+          bun-version: "1.4.0"
+
+      - name: Install web dependencies
+        working-directory: web
+        run: bun install --frozen-lockfile
+
+      - name: Type-check web application
+        working-directory: web
+        run: bun run typecheck
+
+      - name: Set up Go
+        uses: actions/setup-go@v7.0.0
+        with:
+          go-version-file: probe/go.mod
+          cache-dependency-path: probe/go.sum
+
+      - name: Check Go application
+        working-directory: probe
+        run: |
+          go vet ./...
+          go test ./...
+
+      - name: Build web image
+        run: |
+          docker build \
+            --label "org.opencontainers.image.source=https://github.com/${GITHUB_REPOSITORY}" \
+            -t polo-web:ci ./web
+
+      - name: Build probe image
+        run: |
+          docker build \
+            --label "org.opencontainers.image.source=https://github.com/${GITHUB_REPOSITORY}" \
+            -t polo-probe:ci ./probe
+
+      - name: Scan web image
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: image
+          image-ref: polo-web:ci
+          format: table
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          ignore-unfixed: "false"
+          exit-code: "1"
+
+      - name: Scan probe image
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: image
+          image-ref: polo-probe:ci
+          format: table
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          ignore-unfixed: "false"
+          exit-code: "1"
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish verified images
+        run: |
+          for component in web probe; do
+            image="ghcr.io/${GITHUB_REPOSITORY,,}-${component}"
+
+            docker tag "polo-${component}:ci" "${image}:${GITHUB_SHA}"
+            docker tag "polo-${component}:ci" "${image}:latest"
+
+            docker push "${image}:${GITHUB_SHA}"
+            docker push "${image}:latest"
+          done
