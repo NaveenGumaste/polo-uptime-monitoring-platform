@@ -15,6 +15,10 @@ flock -w 30 9
 chmod 700 "$release" "$release/secrets"
 chmod 600 "$release/secrets/web.env" "$release/secrets/registry-token"
 chmod 644 "$release/secrets/discord-webhook" "$release/secrets/grafana-admin-password"
+# tar respects the upload's private umask. Restore container-readable modes for
+# public configuration, while the outer release directory remains private.
+find "$release/monitoring" -type d -exec chmod 755 {} +
+find "$release/monitoring" -type f -exec chmod 644 {} +
 export DOCKER_CONFIG="$release/.docker"
 mkdir -m 700 "$DOCKER_CONFIG"
 trap 'rm -f "$release/secrets/registry-token"; rm -rf "$DOCKER_CONFIG"' EXIT
