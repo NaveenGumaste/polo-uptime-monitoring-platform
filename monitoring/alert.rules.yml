@@ -1,0 +1,29 @@
+groups:
+  - name: polo-alerts
+    rules:
+      - alert: PoloTargetDown
+        expr: polo_target_up{job="polo-probe"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Monitor {{ $labels.monitor_id }} is DOWN"
+          description: "The probe has reported this target as DOWN for at least two minutes."
+
+      - alert: PoloCertificateExpiring
+        expr: polo_target_ssl_expiry_days{job="polo-probe"} < 7
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Certificate for {{ $labels.monitor_id }} expires soon"
+          description: "The certificate has {{ $value }} whole days remaining."
+
+      - alert: PoloProbeUnreachable
+        expr: up{job="polo-probe"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Prometheus cannot collect Polo probe metrics"
+          description: "Scrapes of {{ $labels.instance }} have failed for at least one minute."
