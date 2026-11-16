@@ -1,0 +1,109 @@
+name: Polo Deployment Access Test
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  test-access:
+    runs-on: ubuntu-24.04
+    if: github.ref == 'refs/heads/main'
+    timeout-minutes: 10
+
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      EC2_INSTANCE_ID: ${{ vars.EC2_INSTANCE_ID }}
+
+    steps:
+      - name: Authenticate to AWS
+        uses: aws-actions/configure-aws-credentials@v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: polo-access-${{ github.run_id }}
+          role-duration-seconds: 900
+
+      - name: Verify AWS identity
+        run: aws sts get-caller-identity
+
+      - name: Install Session Manager plugin
+        run: |
+          curl --fail --silent --show-error --retry 3 \
+            https://s3.amazonaws.com/session-manager-downloads/plugin/latest/ubuntu_64bit/session-manager-plugin.deb \
+            -o "$RUNNER_TEMP/session-manager-plugin.deb"
+
+          sudo dpkg -i "$RUNNER_TEMP/session-manager-plugin.deb"
+          session-manager-plugin --version
+
+      - name: Prepare SSH key and trusted host identity
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_KEY }}
+        run: |
+          umask 077
+          : "${SSH_PRIVATE_KEY:?EC2_SSH_KEY is missing}"
+          : "${EC2_INSTANCE_ID:?EC2_INSTANCE_ID is missing}"
+
+          printf '%s\n' "$SSH_PRIVATE_KEY" |
+            tr -d '\r' > "$RUNNER_TEMP/polo-key"
+
+          aws ec2 get-console-output \
+            --region "$AWS_REGION" \
+            --instance-id "$EC2_INSTANCE_ID" \
+            --latest \
+            --output json > "$RUNNER_TEMP/ec2-console.json"
+
+          python3 - <<'PY'
+          import json
+          import os
+          import re
+          from pathlib import Path
+
+          root = Path(os.environ["RUNNER_TEMP"])
+          console = json.loads(
+              (root / "ec2-console.json").read_text(encoding="utf-8")
+          )
+          match = re.search(
+              r"\bssh-ed25519\s+([A-Za-z0-9+/]+={0,3})(?=\s|$)",
+              console.get("Output", ""),
+          )
+          if not match:
+              raise SystemExit("No ED25519 host key found in AWS console output")
+
+          (root / "polo-known-hosts").write_text(
+              f"polo-server ssh-ed25519 {match.group(1)}\n",
+              encoding="utf-8",
+          )
+          PY
+
+          cat > "$RUNNER_TEMP/polo-ssh-config" <<EOF
+          Host polo-server
+            HostName ${EC2_INSTANCE_ID}
+            HostKeyAlias polo-server
+            User ubuntu
+            IdentityFile ${RUNNER_TEMP}/polo-key
+            IdentitiesOnly yes
+            UserKnownHostsFile ${RUNNER_TEMP}/polo-known-hosts
+            StrictHostKeyChecking yes
+            BatchMode yes
+            ConnectTimeout 30
+            ProxyCommand aws ssm start-session --region ${AWS_REGION} --target %h --document-name AWS-StartSSHSession --parameters portNumber=%p
+          EOF
+
+      - name: Verify SSH and Docker access
+        run: |
+          timeout 90s ssh \
+            -F "$RUNNER_TEMP/polo-ssh-config" \
+            polo-server \
+            'whoami && test -f /var/lib/polo/bootstrap-complete && docker version --format "{{.Server.Version}}" && docker compose version'
+
+      - name: Remove temporary credentials and connection files
+        if: always()
+        run: |
+          rm -f \
+            "$RUNNER_TEMP/polo-key" \
+            "$RUNNER_TEMP/polo-known-hosts" \
+            "$RUNNER_TEMP/polo-ssh-config" \
+            "$RUNNER_TEMP/ec2-console.json"
