@@ -49,6 +49,11 @@ jobs:
           printf '%s\n' "$SSH_PRIVATE_KEY" |
             tr -d '\r' > "$RUNNER_TEMP/polo-key"
 
+          if ! ssh-keygen -y -P "" -f "$RUNNER_TEMP/polo-key" >/dev/null 2>&1; then
+            echo "::error::EC2_SSH_KEY must contain a complete, valid, unencrypted private key."
+            exit 1
+          fi
+
           aws ec2 get-console-output \
             --region "$AWS_REGION" \
             --instance-id "$EC2_INSTANCE_ID" \
