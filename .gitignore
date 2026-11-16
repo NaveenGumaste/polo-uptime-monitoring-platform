@@ -22,3 +22,6 @@ Thumbs.db
 # Local tool links
 .grok/
 .agents/
+
+# Local project learning notes
+/project-notes/
