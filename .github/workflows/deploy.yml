@@ -106,7 +106,9 @@ jobs:
     name: Deploy and verify on EC2
     needs: build-scan-push
     runs-on: ubuntu-24.04
-    if: github.ref == 'refs/heads/main'
+    # EC2 infrastructure may be removed when this project is hosted on Vercel.
+    # Keep CI active; require an explicit opt-in before contacting AWS.
+    if: github.ref == 'refs/heads/main' && vars.DEPLOY_TO_EC2 == 'true'
     timeout-minutes: 25
     permissions:
       contents: read

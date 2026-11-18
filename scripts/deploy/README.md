@@ -1,8 +1,13 @@
 # EC2 deployment
 
-Pushes to `main` build, scan, and publish both application images, then deploy
-the matching commit tags through SSH over AWS Systems Manager. The standalone
-access-test workflow remains available for connection troubleshooting.
+Pushes to `main` build, scan, and publish both application images. EC2 deployment
+is opt-in: set the repository Actions variable `DEPLOY_TO_EC2` to `true` only
+after provisioning the EC2 instance, IAM deployment role, and GitHub OIDC provider.
+When enabled, the workflow deploys matching commit tags through SSH over AWS
+Systems Manager. Leave the variable unset or `false` for Vercel hosting or after
+AWS teardown; CI still runs, and the EC2 job is skipped. This workflow does not
+deploy to Vercel; connect the repository through Vercel's Git integration.
+The standalone access-test workflow remains available for connection troubleshooting.
 
 Required repository variables: `AWS_REGION`, `AWS_ROLE_ARN`, `EC2_INSTANCE_ID`.
 Required secrets: `EC2_SSH_KEY`, `DATABASE_URL`, `DISCORD_WEBHOOK_URL`,

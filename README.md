@@ -222,6 +222,7 @@ Configure these repository settings under **Settings > Secrets and variables > A
 
 | Kind | Name | Value |
 | --- | --- | --- |
+| Variable | `DEPLOY_TO_EC2` | `true` to enable EC2 deployment; otherwise leave unset or `false` |
 | Variable | `AWS_REGION` | Terraform deployment region |
 | Variable | `AWS_ROLE_ARN` | Terraform output `github_deploy_role_arn` |
 | Variable | `EC2_INSTANCE_ID` | Terraform output `instance_id` |
@@ -234,6 +235,10 @@ Configure these repository settings under **Settings > Secrets and variables > A
 No long-lived AWS access keys or registry PAT are required by the workflow.
 
 Push to `main` or run **Polo CI/CD** manually:
+
+Steps 4 through 6 run only when `DEPLOY_TO_EC2` is `true`. Leave it unset or `false`
+when using Vercel or after AWS teardown. This preserves the CI checks without
+attempting to use removed AWS resources. Vercel deployments use its Git integration.
 
 1. Type-check the web application and run Go vet/tests.
 2. Build both application images and scan for HIGH/CRITICAL vulnerabilities.
