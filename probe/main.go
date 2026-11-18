@@ -49,6 +49,8 @@ type config struct {
 
 func loadConfig() (config, error) {
 	c := config{baseURL: "http://localhost:3000", listenAddr: ":8082", interval: 60 * time.Second, timeout: 10 * time.Second, concurrency: 10}
+	// WEB_API_URL is supplied by Docker/Compose locally and by the Vercel
+	// web service binding in deployed environments.
 	if value := os.Getenv("WEB_API_URL"); value != "" {
 		c.baseURL = strings.TrimRight(value, "/")
 	}

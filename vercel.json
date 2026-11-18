@@ -1,0 +1,35 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "services": {
+    "web": {
+      "root": "web",
+      "framework": "nextjs"
+    }
+  },
+  "daemons": {
+    "probe": {
+      "root": "probe",
+      "entrypoint": "Dockerfile",
+      "instances": { "bom1": 1 },
+      "livenessProbe": {
+        "httpGet": { "port": 8080, "path": "/health" }
+      },
+      "bindings": [
+        {
+          "type": "service",
+          "service": "web",
+          "format": "url",
+          "env": "WEB_API_URL"
+        }
+      ]
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": {
+        "service": "web"
+      }
+    }
+  ]
+}

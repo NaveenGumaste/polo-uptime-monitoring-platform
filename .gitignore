@@ -14,6 +14,7 @@ coverage/
 test-results/
 *.tsbuildinfo
 playwright-report/
+.vercel/
 
 # OS and editor files
 .DS_Store

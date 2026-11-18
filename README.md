@@ -385,6 +385,52 @@ and the Neon project separately if you no longer need them.
 Terraform's [planning documentation](https://developer.hashicorp.com/terraform/cli/commands/plan)
 describes saved destruction plans; AWS documents [versioned bucket cleanup](https://docs.aws.amazon.com/AmazonS3/latest/userguide/empty-bucket.html).
 
+## Vercel deployment
+
+Import the repository with the Vercel project Root Directory set to the repository
+root, not `web/`. The root `vercel.json` deploys `web/` as the public Next.js service
+and `probe/` as a private, continuously running container daemon. All public paths,
+including `/api/*`, go to `web` without a prefix change. The daemon's `/health` and
+`/metrics` endpoints have no public route. Vercel checks `/health` on container port
+8080 for liveness.
+
+Configure `DATABASE_URL` in the Vercel project environment with your PostgreSQL
+connection string. Do not set `WEB_API_URL` in Vercel: the binding on `probe`
+injects the URL for `web` at runtime. The Go process already reads this variable
+to fetch `/api/monitors` and post `/api/check-result`. The browser uses same-origin
+`/api/*` URLs; the web service does not call the probe.
+
+The configuration proposes one daemon instance in Mumbai (`bom1`). Keep one
+instance to avoid independent workers submitting duplicate checks. Stop any
+existing EC2/local probe using the same database when switching production.
+Choose separate databases for previews and production if they should not share
+monitor state. Prometheus, Grafana, Alertmanager, and Discord alert delivery from
+the Compose stack are not included in this Vercel configuration.
+
+Run the web service from the repository root:
+
+```powershell
+bunx vercel@latest dev --local
+```
+
+Vercel currently runs daemons only in production, and `vercel dev` does not start
+them. To test the probe locally, run it in a second PowerShell terminal against
+the URL printed by `vercel dev` (normally port 3000):
+
+```powershell
+Set-Location probe
+$env:WEB_API_URL = 'http://localhost:3000'
+go run .
+```
+
+That explicit URL is only for the separately started local probe; the deployed
+daemon uses the binding. Development also needs `DATABASE_URL`, for example in an
+ignored root `.env.local`. The probe does not need database credentials.
+
+See Vercel's [Services](https://vercel.com/docs/services),
+[service bindings](https://vercel.com/docs/services/bindings), and
+[Daemons](https://vercel.com/docs/daemons) documentation.
+
 ## Keeping a web-only demo
 
 The `web/` directory can be deployed separately to a Next.js-compatible host such
